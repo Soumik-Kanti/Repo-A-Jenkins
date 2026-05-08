@@ -4,3 +4,4 @@ another trigger test
 another trigger test
 another trigger test
 wait test
+wait test
