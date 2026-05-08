@@ -1,4 +1,4 @@
-name: Trigger Denowatt Playwright Tests
+name: Trigger and Wait Denowatt Playwright Tests
 
 on:
   push:
@@ -8,19 +8,90 @@ on:
   workflow_dispatch:
 
 jobs:
-  trigger-playwright:
+  trigger-and-wait-playwright:
     runs-on: ubuntu-latest
 
     steps:
       - name: Trigger Repo B Playwright workflow
         env:
           GH_TOKEN: ${{ secrets.REPO_B_TOKEN }}
+          TRIGGER_ID: repoA-${{ github.run_id }}-${{ github.run_attempt }}
           SOURCE_REPO: ${{ github.repository }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
-          curl -L -X POST \
+          echo "TRIGGER_ID=$TRIGGER_ID" >> "$GITHUB_ENV"
+
+          curl -fsSL -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/Soumik-Kanti/denowatt-playwright/dispatches \
-            -d "{\"event_type\":\"run-playwright-tests\",\"client_payload\":{\"source_repo\":\"$SOURCE_REPO\",\"sha\":\"$SOURCE_SHA\"}}"
+            -d "{\"event_type\":\"run-playwright-tests\",\"client_payload\":{\"source_repo\":\"$SOURCE_REPO\",\"sha\":\"$SOURCE_SHA\",\"trigger_id\":\"$TRIGGER_ID\"}}"
+
+          echo "Triggered Repo B with ID: $TRIGGER_ID"
+
+      - name: Wait for Repo B Playwright result
+        env:
+          GH_TOKEN: ${{ secrets.REPO_B_TOKEN }}
+          TRIGGER_ID: ${{ env.TRIGGER_ID }}
+        run: |
+          echo "Waiting for Repo B Playwright run..."
+          echo "Trigger ID: $TRIGGER_ID"
+
+          for i in {1..60}; do
+            curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/Soumik-Kanti/denowatt-playwright/actions/runs?event=repository_dispatch&per_page=30" \
+              > runs.json
+
+            RESULT=$(python3 - <<'PY'
+import json
+import os
+
+trigger_id = os.environ["TRIGGER_ID"]
+
+with open("runs.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+for run in data.get("workflow_runs", []):
+    title = run.get("display_title") or ""
+    if trigger_id in title:
+        run_id = str(run.get("id"))
+        status = run.get("status") or ""
+        conclusion = run.get("conclusion") or ""
+        url = run.get("html_url") or ""
+        print(f"{run_id}|{status}|{conclusion}|{url}")
+        break
+PY
+)
+
+            if [ -z "$RESULT" ]; then
+              echo "Repo B run not found yet. Waiting..."
+              sleep 10
+              continue
+            fi
+
+            IFS='|' read -r RUN_ID STATUS CONCLUSION RUN_URL <<< "$RESULT"
+
+            echo "Repo B Run URL: $RUN_URL"
+            echo "Status: $STATUS"
+            echo "Conclusion: $CONCLUSION"
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                echo "Repo B Playwright tests passed."
+                exit 0
+              else
+                echo "Repo B Playwright tests failed."
+                exit 1
+              fi
+            fi
+
+            echo "Repo B still running. Waiting..."
+            sleep 10
+          done
+
+          echo "Timeout: Repo B did not finish within 10 minutes."
+          exit 1
