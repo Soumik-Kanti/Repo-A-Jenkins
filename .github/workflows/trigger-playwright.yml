@@ -47,25 +47,25 @@ jobs:
               > runs.json
 
             RESULT=$(python3 - <<'PY'
-import json
-import os
+          import json
+          import os
 
-trigger_id = os.environ["TRIGGER_ID"]
+          trigger_id = os.environ["TRIGGER_ID"]
 
-with open("runs.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
+          with open("runs.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
 
-for run in data.get("workflow_runs", []):
-    title = run.get("display_title") or ""
-    if trigger_id in title:
-        run_id = str(run.get("id"))
-        status = run.get("status") or ""
-        conclusion = run.get("conclusion") or ""
-        url = run.get("html_url") or ""
-        print(f"{run_id}|{status}|{conclusion}|{url}")
-        break
-PY
-)
+          for run in data.get("workflow_runs", []):
+              title = run.get("display_title") or ""
+              if trigger_id in title:
+                  run_id = str(run.get("id"))
+                  status = run.get("status") or ""
+                  conclusion = run.get("conclusion") or ""
+                  url = run.get("html_url") or ""
+                  print(f"{run_id}|{status}|{conclusion}|{url}")
+                  break
+          PY
+            )
 
             if [ -z "$RESULT" ]; then
               echo "Repo B run not found yet. Waiting..."
