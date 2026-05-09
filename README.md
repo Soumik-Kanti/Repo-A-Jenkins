@@ -5,3 +5,4 @@ another trigger test
 another trigger test
 wait test
 wait test
+Test Jenkins auto trigger 
